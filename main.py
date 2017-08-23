@@ -34,7 +34,6 @@ def load_dataset():
 
             cond = image <= image_cond
             if np.all(cond):
-                # TODO: No Need?
                 del image
                 image = cv2.imread(image_path, 0)
                 sobel_x = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=3)  # ksize 1 and 3 both looks good
@@ -59,9 +58,6 @@ def read_mixed_image():
     return image
 
 
-
-
-
 def reconstruct_path(node_tuple, came_from):
     if node_tuple[2] == 1:
         return []
@@ -72,6 +68,7 @@ def reconstruct_path(node_tuple, came_from):
         parent = came_from[parent]
 
     return path      # [img_idx]
+
 
 def heuristic_cost_estimate(prev_node_tuple, came_from, current_source_idx, data):
     path = reconstruct_path(prev_node_tuple, came_from)
@@ -88,14 +85,15 @@ def heuristic_cost_estimate(prev_node_tuple, came_from, current_source_idx, data
     loss_y = np.sqrt(np.sum(np.square(mixed_image['y'] - reconstructed_image['y'])))
     return loss_x + loss_y
 
+
 def gradient_loss(residual, source_idx, data):
     # Euclidean distance
     max_abs_data_x = np.max(np.absolute(data['x'][source_idx]))
     max_abs_data_y = np.max(np.absolute(data['y'][source_idx]))
 
+    # adaptive loss
     loss_x = np.sqrt(np.sum(np.square(data['x'][source_idx]/max_abs_data_x * (residual['x'] - w * data['x'][source_idx]))))
     loss_y = np.sqrt(np.sum(np.square(data['y'][source_idx]/max_abs_data_y * (residual['y'] - w * data['y'][source_idx]))))
-    # TODO: mean or sum?
     return loss_x + loss_y
 
 
@@ -107,26 +105,6 @@ def reconstruct_residual_gradient(node_tuple, came_from, data):
         mixed_image['x'] = mixed_image['x'] - w * data['x'][idx]
         mixed_image['y'] = mixed_image['y'] - w * data['y'][idx]
     return mixed_image
-
-
-def is_matched(node_tuple, came_from, data):
-    original_image = cv2.imread(mixed_image_path, 0)
-    path = reconstruct_path(node_tuple, came_from)
-
-    reconstructed_image = None
-    
-    for idx in path:
-        if reconstructed_image is None:
-            reconstructed_image = w * cv2.imread(data['files'][idx], 0)
-        else:
-            reconstructed_image += w * cv2.imread(data['files'][idx], 0)
-
-    loss = np.sqrt(np.sum(np.square(reconstructed_image - original_image)))
-    
-    if loss == 0:
-        return True
-    return False
-
 
 
 def a_star_search(data):
@@ -149,7 +127,6 @@ def a_star_search(data):
                 return solns
 
         else:
-            # TODO: don't forget to subtract gradient
             residual = reconstruct_residual_gradient(current, came_from, data)
             for i in range(data['len']):
                 grad_loss = gradient_loss(residual, i, data)
@@ -169,30 +146,7 @@ def a_star_search(data):
                     continue
 
 
-def greedy():
-    # NOT MODIFIED!
-    data = load_dataset()
-    residual = read_mixed_image()
-    best_match = [0] * 5
-    for layer in range(5):
-        best_match[layer] = -1
-        best_loss = gradient_loss(residual, data['len'] - 1, data)
-        for i in range(data['len'] - 1):
-            current_loss = gradient_loss(residual, i, data)
-            if current_loss < best_loss:
-                best_loss = current_loss
-                best_match[layer] = i
-
-        residual['x'] = residual['x'] - data['x'][best_match[layer]]
-        residual['y'] = residual['y'] - data['y'][best_match[layer]]
-
-    for face_idx in best_match:
-        print(data['labels'][face_idx])
-
-# greedy()
-
-
-def signal_separation():
+def signal_separation():        # main
     data = load_dataset()
     possible_solns = a_star_search(data)
     soln_num = 0
@@ -204,8 +158,7 @@ def signal_separation():
         print('\n')
 
 
-
-
+signal_separation()
 
 
 def generate_mixed_image():
@@ -222,6 +175,9 @@ def generate_mixed_image():
 
     scipy.misc.imsave("./sample_debug.png", merged_img)
     io.show()
+
+
+
 
 
 def experiment():
@@ -266,7 +222,6 @@ def experiment():
     # io.imshow(img)
 
 
-
     # plt.imshow(sample)
     # pca = PCA(n_components=100)
     # pca.fit(sample)
@@ -289,11 +244,8 @@ def experiment():
     pic = w*pic1 + w*pic2 + w*pic3 + w*pic4 + w*pic5
     pic = pic.astype(np.uint8)
     io.imshow(pic)
-    #
     io.show()
     # cv2.waitKey(0)
 
-experiment()
+# experiment()
 # generate_mixed_image()
-# signal_separation()
-
