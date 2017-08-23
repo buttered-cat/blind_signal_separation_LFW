@@ -10,32 +10,42 @@ import scipy.misc
 w = 1/5
 w_inverse = int(1/w)
 
-DEBUG = True
+DEBUG = False
 mixed_image_path = "./sample_debug.png" if DEBUG else "./sample.png"
 
 
 def load_dataset():
     lfw_dataset_root = "D:\\Docs\\Machine Learning\\Data\\LFW\\lfw_test" if DEBUG else "D:\\Docs\\Machine Learning\\Data\\LFW\\lfw\\lfw"
+    original_image = w_inverse * cv2.imread(mixed_image_path).astype(np.uint16)
+    image_cond = np.clip(original_image, None, 255.)
+    del original_image
     lfw_dataset = dict()
-    lfw_dataset['sobel_x'] = []
-    lfw_dataset['sobel_y'] = []
+    lfw_dataset['x'] = []
+    lfw_dataset['y'] = []
     lfw_dataset['labels'] = []
+    lfw_dataset['files'] = []
     _, dirnames, _ = next(os.walk(lfw_dataset_root))
     count = 0
     for face_label in dirnames:
         dirpath, _, filenames = next(os.walk(os.path.join(lfw_dataset_root, face_label)))
         for filename in filenames:
             image_path = os.path.join(dirpath, filename)
-            image = cv2.imread(image_path, 0)
-            # TODO: No Need?
-            sobel_x = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=3)  # ksize 1 and 3 both looks good
-            sobel_y = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=3)  # ksize 1 and 3 both looks good
-            lfw_dataset['sobel_x'].append(sobel_x)
-            lfw_dataset['sobel_y'].append(sobel_y)
-            lfw_dataset['labels'].append(face_label)
+            image = cv2.imread(image_path)
+
+            cond = image <= image_cond
+            if np.all(cond):
+                # TODO: No Need?
+                del image
+                image = cv2.imread(image_path, 0)
+                sobel_x = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=3)  # ksize 1 and 3 both looks good
+                sobel_y = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=3)  # ksize 1 and 3 both looks good
+                lfw_dataset['x'].append(sobel_x)
+                lfw_dataset['y'].append(sobel_y)
+                lfw_dataset['labels'].append(face_label)
+                lfw_dataset['files'].append(image_path)
+                print(filename)
+                count += 1
             del image
-            print(filename)
-            count += 1
     print("%d faces in the dataset." % count)
     lfw_dataset['len'] = count
     return lfw_dataset
@@ -44,8 +54,8 @@ def load_dataset():
 def read_mixed_image():
     original_image = cv2.imread(mixed_image_path, 0)
     image = dict()
-    image['sobel_x'] = cv2.Sobel(original_image, cv2.CV_64F, 1, 0, ksize=3)
-    image['sobel_y'] = cv2.Sobel(original_image, cv2.CV_64F, 0, 1, ksize=3)
+    image['x'] = cv2.Sobel(original_image, cv2.CV_64F, 1, 0, ksize=3)
+    image['y'] = cv2.Sobel(original_image, cv2.CV_64F, 0, 1, ksize=3)
     return image
 
 
@@ -67,21 +77,21 @@ def heuristic_cost_estimate(prev_node_tuple, came_from, current_source_idx, data
     path = reconstruct_path(prev_node_tuple, came_from)
     mixed_image = read_mixed_image()
     reconstructed_image = dict()
-    reconstructed_image['sobel_x'] = w_inverse * data['sobel_x'][current_source_idx]
-    reconstructed_image['sobel_y'] = w_inverse * data['sobel_y'][current_source_idx]
+    reconstructed_image['x'] = w * data['x'][current_source_idx]
+    reconstructed_image['y'] = w * data['y'][current_source_idx]
     for idx in path:
-        reconstructed_image['sobel_x'] += w_inverse * data['sobel_x'][idx]
-        reconstructed_image['sobel_y'] += w_inverse * data['sobel_y'][idx]
+        reconstructed_image['x'] += w * data['x'][idx]
+        reconstructed_image['y'] += w * data['y'][idx]
 
     # Euclidean distance
-    loss_x = np.sqrt(np.sum(np.square(mixed_image['sobel_x'] - reconstructed_image['sobel_x'])))
-    loss_y = np.sqrt(np.sum(np.square(mixed_image['sobel_y'] - reconstructed_image['sobel_y'])))
+    loss_x = np.sqrt(np.sum(np.square(mixed_image['x'] - reconstructed_image['x'])))
+    loss_y = np.sqrt(np.sum(np.square(mixed_image['y'] - reconstructed_image['y'])))
     return loss_x + loss_y
 
 def gradient_loss(residual, source_idx, data):
-    # weighted gradient
-    loss_x = np.sqrt(np.sum(np.square(data['sobel_x'][source_idx]/255 * (w_inverse * residual['sobel_x'] - data['sobel_x'][source_idx]))))
-    loss_y = np.sqrt(np.sum(np.square(data['sobel_y'][source_idx]/255 * (w_inverse * residual['sobel_y'] - data['sobel_y'][source_idx]))))
+    # Euclidean distance
+    loss_x = np.sqrt(np.sum(np.square(data['x'][source_idx]/255 * (residual['x'] - w * data['x'][source_idx]))))
+    loss_y = np.sqrt(np.sum(np.square(data['y'][source_idx]/255 * (residual['y'] - w * data['y'][source_idx]))))
     # TODO: mean or sum?
     return np.sum(loss_x + loss_y)
 
@@ -90,9 +100,29 @@ def reconstruct_residual_gradient(node_tuple, came_from, data):
     path = reconstruct_path(node_tuple, came_from)
     mixed_image = read_mixed_image()
     for idx in path:
-        mixed_image['sobel_x'] = mixed_image['sobel_x'] - data['sobel_x'][idx]
-        mixed_image['sobel_y'] = mixed_image['sobel_y'] - data['sobel_y'][idx]
+        # mixed_image['x'] = mixed_image['x'] - w * data['x'][idx]/255 * data['x'][idx]
+        mixed_image['x'] = mixed_image['x'] - w * data['x'][idx]
+        mixed_image['y'] = mixed_image['y'] - w * data['y'][idx]
     return mixed_image
+
+
+def is_matched(node_tuple, came_from, data):
+    original_image = cv2.imread(mixed_image_path, 0)
+    path = reconstruct_path(node_tuple, came_from)
+
+    reconstructed_image = None
+    
+    for idx in path:
+        if reconstructed_image is None:
+            reconstructed_image = w * cv2.imread(data['files'][idx], 0)
+        else:
+            reconstructed_image += w * cv2.imread(data['files'][idx], 0)
+
+    loss = np.sqrt(np.sum(np.square(reconstructed_image - original_image)))
+    
+    if loss == 0:
+        return True
+    return False
 
 
 
@@ -110,7 +140,7 @@ def a_star_search(data):
         print("current node tuple: ", current)
         if current[2] == -4:
             # end
-            if soln_num >= 10:
+            if soln_num >= 1:
                 return solns
             solns.append(reconstruct_path(current, came_from))
             soln_num += 1
@@ -148,8 +178,8 @@ def greedy():
                 best_loss = current_loss
                 best_match[layer] = i
 
-        residual['sobel_x'] = residual['sobel_x'] - data['sobel_x'][best_match[layer]]
-        residual['sobel_y'] = residual['sobel_y'] - data['sobel_y'][best_match[layer]]
+        residual['x'] = residual['x'] - data['x'][best_match[layer]]
+        residual['y'] = residual['y'] - data['y'][best_match[layer]]
 
     for face_idx in best_match:
         print(data['labels'][face_idx])
