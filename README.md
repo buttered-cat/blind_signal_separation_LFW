@@ -8,7 +8,7 @@ Suppose an image is a superimposition of 5 faces in the dataset with equal weigh
 Method
 ---------------
 
-The idea behind the code is fairly simple. Natural images usually have quite sparse gradients, which, when images are superimposed, makes it less probable that the information get overriden and lost. So we can use gradients as a criterion to match images layer by layer along with a searching algorithm, in this case the A* algorithm(which now has degenerated into a Dijkstra algorithm since it performs better).
+The idea behind the code is fairly simple. Natural images usually have quite sparse gradients, which, when images are superimposed, makes it less probable that the information gets overriden and lost. So we can use gradients as a criterion to match images layer by layer along with a searching algorithm, in this case the A* algorithm(which now has degenerated into a Dijkstra algorithm since it performs better).
 
 [This paper](https://pdfs.semanticscholar.org/ac81/becda896b635bc9c014d365bd8acdce01877.pdf) is also based on the sparsity of image gradients, but aimed for a more complex problem. Check it out for more details.
 
