@@ -67,6 +67,7 @@ def a_star_search(data):
         return path      # [img_idx]
 
     def heuristic_cost_estimate(prev_node_tuple, came_from, current_source_idx, data):
+        return 0
         path = reconstruct_path(prev_node_tuple, came_from)
         mixed_image = read_mixed_image()
         reconstructed_image = dict()
@@ -83,8 +84,8 @@ def a_star_search(data):
 
     def gradient_loss(residual, source_idx, data):
         # weighted gradient
-        loss_x = np.absolute(data['sobel_x'][source_idx]/255 * (w_inverse * residual['sobel_x'] - data['sobel_x'][source_idx]))
-        loss_y = np.absolute(data['sobel_x'][source_idx]/255 * (w_inverse * residual['sobel_y'] - data['sobel_y'][source_idx]))
+        loss_x = np.sqrt(np.sum(np.square(data['sobel_x'][source_idx]/255 * (w_inverse * residual['sobel_x'] - data['sobel_x'][source_idx]))))
+        loss_y = np.sqrt(np.sum(np.square(data['sobel_y'][source_idx]/255 * (w_inverse * residual['sobel_y'] - data['sobel_y'][source_idx]))))
         # TODO: mean or sum?
         return np.sum(loss_x + loss_y)
 
