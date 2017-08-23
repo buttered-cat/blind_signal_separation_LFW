@@ -10,15 +10,14 @@ import scipy.misc
 w = 1/5
 w_inverse = int(1/w)
 
-DEBUG = True
+DEBUG = False
 mixed_image_path = "./sample_debug.png" if DEBUG else "./sample.png"
-
+gaussian_sigma = 1
 
 def load_dataset():
     lfw_dataset_root = "D:\\Docs\\Machine Learning\\Data\\LFW\\lfw_test" if DEBUG else "D:\\Docs\\Machine Learning\\Data\\LFW\\lfw\\lfw"
     lfw_dataset = dict()
-    lfw_dataset['sobel_x'] = []
-    lfw_dataset['sobel_y'] = []
+    lfw_dataset['laplacian'] = []
     lfw_dataset['labels'] = []
     _, dirnames, _ = next(os.walk(lfw_dataset_root))
     count = 0
@@ -27,11 +26,8 @@ def load_dataset():
         for filename in filenames:
             image_path = os.path.join(dirpath, filename)
             image = cv2.imread(image_path, 0)
-            # TODO: No Need?
-            sobel_x = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=3)  # ksize 1 and 3 both looks good
-            sobel_y = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=3)  # ksize 1 and 3 both looks good
-            lfw_dataset['sobel_x'].append(sobel_x)
-            lfw_dataset['sobel_y'].append(sobel_y)
+            laplacian = cv2.Laplacian(image, cv2.CV_64F, ksize=3, scale=1)
+            lfw_dataset['laplacian'].append(laplacian)
             lfw_dataset['labels'].append(face_label)
             del image
             print(filename)
@@ -43,10 +39,11 @@ def load_dataset():
 
 def read_mixed_image():
     original_image = cv2.imread(mixed_image_path, 0)
-    image = dict()
-    image['sobel_x'] = cv2.Sobel(original_image, cv2.CV_64F, 1, 0, ksize=3)
-    image['sobel_y'] = cv2.Sobel(original_image, cv2.CV_64F, 0, 1, ksize=3)
-    return image
+    laplacian = cv2.Laplacian(original_image, cv2.CV_64F, ksize=3, scale=1)
+    # TODO: A-B test
+    # laplacian = cv2.GaussianBlur(laplacian, (3, 3), gaussian_sigma)
+    del original_image
+    return laplacian
 
 
 
@@ -66,32 +63,25 @@ def reconstruct_path(node_tuple, came_from):
 def heuristic_cost_estimate(prev_node_tuple, came_from, current_source_idx, data):
     path = reconstruct_path(prev_node_tuple, came_from)
     mixed_image = read_mixed_image()
-    reconstructed_image = dict()
-    reconstructed_image['sobel_x'] = w_inverse * data['sobel_x'][current_source_idx]
-    reconstructed_image['sobel_y'] = w_inverse * data['sobel_y'][current_source_idx]
+    reconstructed_image = w_inverse * data['laplacian'][current_source_idx]
     for idx in path:
-        reconstructed_image['sobel_x'] += w_inverse * data['sobel_x'][idx]
-        reconstructed_image['sobel_y'] += w_inverse * data['sobel_y'][idx]
+        reconstructed_image += w_inverse * data['laplacian'][idx]
 
     # Euclidean distance
-    loss_x = np.sqrt(np.sum(np.square(mixed_image['sobel_x'] - reconstructed_image['sobel_x'])))
-    loss_y = np.sqrt(np.sum(np.square(mixed_image['sobel_y'] - reconstructed_image['sobel_y'])))
-    return loss_x + loss_y
+    loss = np.sqrt(np.sum(np.square(mixed_image - reconstructed_image)))
+    return loss
 
 def gradient_loss(residual, source_idx, data):
-    # weighted gradient
-    loss_x = np.sqrt(np.sum(np.square(data['sobel_x'][source_idx]/255 * (w_inverse * residual['sobel_x'] - data['sobel_x'][source_idx]))))
-    loss_y = np.sqrt(np.sum(np.square(data['sobel_y'][source_idx]/255 * (w_inverse * residual['sobel_y'] - data['sobel_y'][source_idx]))))
-    # TODO: mean or sum?
-    return np.sum(loss_x + loss_y)
+    # Euclidean distance
+    loss = np.sqrt(np.sum(np.square(data['laplacian'][source_idx]/255 * (w_inverse * residual - data['laplacian'][source_idx]))))
+    return loss
 
 
 def reconstruct_residual_gradient(node_tuple, came_from, data):
     path = reconstruct_path(node_tuple, came_from)
     mixed_image = read_mixed_image()
     for idx in path:
-        mixed_image['sobel_x'] = mixed_image['sobel_x'] - data['sobel_x'][idx]
-        mixed_image['sobel_y'] = mixed_image['sobel_y'] - data['sobel_y'][idx]
+        mixed_image = mixed_image - data['laplacian'][idx]
     return mixed_image
 
 
@@ -115,16 +105,15 @@ def a_star_search(data):
             solns.append(reconstruct_path(current, came_from))
             soln_num += 1
 
-        # TODO: don't forget to subtract gradient
         residual = reconstruct_residual_gradient(current, came_from, data)
         for i in range(data['len']):
             grad_loss = gradient_loss(residual, i, data)
-            # cumulative_grad_loss = grad_loss + current[1]
+            cumulative_grad_loss = grad_loss + current[1]
             new_layer = current[2]-1
-            # tentative_score = cumulative_grad_loss + heuristic_cost_estimate(current, came_from, i, data)
+            tentative_score = cumulative_grad_loss + heuristic_cost_estimate(current, came_from, i, data)
 
-            cumulative_grad_loss = grad_loss
-            tentative_score = cumulative_grad_loss
+            # cumulative_grad_loss = grad_loss
+            # tentative_score = cumulative_grad_loss
 
 
             if not(((new_layer, i) in best_grad_loss) and (cumulative_grad_loss >= best_grad_loss[(new_layer, i)])):
@@ -136,6 +125,7 @@ def a_star_search(data):
 
 
 def greedy():
+    # TODO: not modified
     data = load_dataset()
     residual = read_mixed_image()
     best_match = [0] * 5
@@ -168,11 +158,10 @@ def signal_separation():
             print(data['labels'][face_idx])
         print('\n')
 
-
-
-
-
 signal_separation()
+
+
+
 
 def generate_mixed_image():
     test_data_path = "D:\\Docs\\Machine Learning\\Data\\LFW\\lfw_test"
@@ -195,16 +184,17 @@ def experiment():
 
     # sample = io.imread("./sample.png", as_grey=True)
     # sample = cv2.imread("./sample.png", 0)
-    # sample = cv2.imread("D:\\Docs\\Machine Learning\\Data\\LFW\\lfw\\lfw\\Aaron_Eckhart\\Aaron_Eckhart_0001.jpg", 0)
-    sample = cv2.imread("./sample1.png", 0)
+    sample = cv2.imread("D:\\Docs\\Machine Learning\\Data\\LFW\\lfw\\lfw\\Aaron_Eckhart\\Aaron_Eckhart_0001.jpg", 0)
+    # sample = cv2.imread("./sample1.png", 0)
 
     # print(sample.shape)
     # cv2.imshow("mixed image", sample)
 
     laplacian = cv2.Laplacian(sample, cv2.CV_64F, ksize=3, scale=1)
+    # laplacian = cv2.GaussianBlur(laplacian, (3, 3), 1)
     laplacian = cv2.convertScaleAbs(laplacian)
     # cv2.threshold(laplacian, )
-    # print(laplacian)
+    print(laplacian)
     # laplacian = np.uint8(laplacian)
 
     # sobelx = cv2.Sobel(sample, cv2.CV_64F, 1, 0, ksize=3)       # ksize 1 and 3 both looks good
