@@ -41,7 +41,7 @@ def load_dataset():
                 sobel_y = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=3)  # ksize 1 and 3 both looks good
                 lfw_dataset['x'].append(sobel_x)
                 lfw_dataset['y'].append(sobel_y)
-                lfw_dataset['labels'].append(face_label)
+                lfw_dataset['labels'].append(filename)
                 lfw_dataset['files'].append(image_path)
                 print(filename)
                 count += 1
@@ -90,10 +90,13 @@ def heuristic_cost_estimate(prev_node_tuple, came_from, current_source_idx, data
 
 def gradient_loss(residual, source_idx, data):
     # Euclidean distance
-    loss_x = np.sqrt(np.sum(np.square(data['x'][source_idx]/255 * (residual['x'] - w * data['x'][source_idx]))))
-    loss_y = np.sqrt(np.sum(np.square(data['y'][source_idx]/255 * (residual['y'] - w * data['y'][source_idx]))))
+    max_abs_data_x = np.max(np.absolute(data['x'][source_idx]))
+    max_abs_data_y = np.max(np.absolute(data['y'][source_idx]))
+
+    loss_x = np.sqrt(np.sum(np.square(data['x'][source_idx]/max_abs_data_x * (residual['x'] - w * data['x'][source_idx]))))
+    loss_y = np.sqrt(np.sum(np.square(data['y'][source_idx]/max_abs_data_y * (residual['y'] - w * data['y'][source_idx]))))
     # TODO: mean or sum?
-    return np.sum(loss_x + loss_y)
+    return loss_x + loss_y
 
 
 def reconstruct_residual_gradient(node_tuple, came_from, data):
@@ -140,32 +143,34 @@ def a_star_search(data):
         print("current node tuple: ", current)
         if current[2] == -4:
             # end
-            if soln_num >= 1:
-                return solns
             solns.append(reconstruct_path(current, came_from))
             soln_num += 1
+            if soln_num >= 1:
+                return solns
 
-        # TODO: don't forget to subtract gradient
-        residual = reconstruct_residual_gradient(current, came_from, data)
-        for i in range(data['len']):
-            grad_loss = gradient_loss(residual, i, data)
-            # cumulative_grad_loss = grad_loss + current[1]
-            new_layer = current[2]-1
-            # tentative_score = cumulative_grad_loss + heuristic_cost_estimate(current, came_from, i, data)
+        else:
+            # TODO: don't forget to subtract gradient
+            residual = reconstruct_residual_gradient(current, came_from, data)
+            for i in range(data['len']):
+                grad_loss = gradient_loss(residual, i, data)
+                # cumulative_grad_loss = grad_loss + current[1]
+                new_layer = current[2]-1
+                # tentative_score = cumulative_grad_loss + heuristic_cost_estimate(current, came_from, i, data)
 
-            cumulative_grad_loss = grad_loss
-            tentative_score = cumulative_grad_loss
+                cumulative_grad_loss = grad_loss
+                tentative_score = cumulative_grad_loss
 
 
-            if not(((new_layer, i) in best_grad_loss) and (cumulative_grad_loss >= best_grad_loss[(new_layer, i)])):
-                best_grad_loss[(new_layer, i)] = cumulative_grad_loss
-                came_from[(new_layer, i)] = (current[2], current[3])
-                heapq.heappush(candidate_heap, (tentative_score, cumulative_grad_loss, new_layer, i))
-            else:
-                continue
+                if not(((new_layer, i) in best_grad_loss) and (cumulative_grad_loss >= best_grad_loss[(new_layer, i)])):
+                    best_grad_loss[(new_layer, i)] = cumulative_grad_loss
+                    came_from[(new_layer, i)] = (current[2], current[3])
+                    heapq.heappush(candidate_heap, (tentative_score, cumulative_grad_loss, new_layer, i))
+                else:
+                    continue
 
 
 def greedy():
+    # NOT MODIFIED!
     data = load_dataset()
     residual = read_mixed_image()
     best_match = [0] * 5
@@ -202,7 +207,6 @@ def signal_separation():
 
 
 
-signal_separation()
 
 def generate_mixed_image():
     test_data_path = "D:\\Docs\\Machine Learning\\Data\\LFW\\lfw_test"
@@ -276,18 +280,20 @@ def experiment():
     # S = ica.fit_transform(sample)
     # plt.show()
 
-    # pic1 = io.imread("D:\\Docs\\Machine Learning\\Data\\LFW\\lfw\\lfw\\Aaron_Eckhart\\Aaron_Eckhart_0001.jpg")
-    # pic2 = io.imread("D:\\Docs\\Machine Learning\\Data\\LFW\\lfw\\lfw\\Johnny_Tapia\\Johnny_Tapia_0003.jpg")
-    # pic3 = io.imread("D:\\Docs\\Machine Learning\\Data\\LFW\\lfw\\lfw\\Joshua_Perper\\Joshua_Perper_0001.jpg")
-    # pic4 = io.imread("D:\\Docs\\Machine Learning\\Data\\LFW\\lfw\\lfw\\Michael_McNeely\\Michael_McNeely_0001.jpg")
-    # pic5 = io.imread("D:\\Docs\\Machine Learning\\Data\\LFW\\lfw\\lfw\\Shannon_OBrien\\Shannon_OBrien_0001.jpg")
-    #
-    # pic = w*pic1 + w*pic2 + w*pic3 + w*pic4 + w*pic5
-    # pic = pic.astype(np.uint8)
-    # io.imshow(pic)
+    pic1 = io.imread("D:\\Docs\\Machine Learning\\Data\\LFW\\lfw\\lfw\\Yao_Ming\\Yao_Ming_0001.jpg")
+    pic2 = io.imread("D:\\Docs\\Machine Learning\\Data\\LFW\\lfw\\lfw\\Amanda_Marsh\\Amanda_Marsh_0001.jpg")
+    pic3 = io.imread("D:\\Docs\\Machine Learning\\Data\\LFW\\lfw\\lfw\\Vincent_Gallo\\Vincent_Gallo_0003.jpg")
+    pic4 = io.imread("D:\\Docs\\Machine Learning\\Data\\LFW\\lfw\\lfw\\George_HW_Bush\\George_HW_Bush_0008.jpg")
+    pic5 = io.imread("D:\\Docs\\Machine Learning\\Data\\LFW\\lfw\\lfw\\Zhang_Ziyi\\Zhang_Ziyi_0003.jpg")
+
+    pic = w*pic1 + w*pic2 + w*pic3 + w*pic4 + w*pic5
+    pic = pic.astype(np.uint8)
+    io.imshow(pic)
     #
     io.show()
     # cv2.waitKey(0)
 
-# experiment()
+experiment()
 # generate_mixed_image()
+# signal_separation()
+
